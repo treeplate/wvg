@@ -1,1 +1,1 @@
-implementation for flutter.dev/go/vector-graphics
+implementation of [flutter.dev/go/vector-graphics]
