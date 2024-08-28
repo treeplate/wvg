@@ -10,12 +10,15 @@ const bytesPerBlock = 256;
 late final ByteData file;
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  file = await rootBundle.load("check.wvg");
-  runApp(Directionality(
+  file = await rootBundle.load('video-005.wvg');
+  runApp(
+    Directionality(
       textDirection: TextDirection.ltr,
       child: CustomPaint(
         painter: WVGPainter(file),
-      )));
+      ),
+    ),
+  );
 }
 
 class WVGPainter extends CustomPainter {
@@ -32,16 +35,11 @@ class WVGPainter extends CustomPainter {
       if (i == 4) {
         blockOffsets.add(256);
       } else {
-        //print(i-8);
-        //print(blockSizes.getUint32(i-8, Endian.little));
-        blockOffsets.add(
-            blockOffsets[((i ~/ 4) - 2)] + blockSizes.getUint32(i - 8, Endian.little) * 256);
+        blockOffsets.add(blockOffsets[((i ~/ 4) - 2)] +
+            blockSizes.getUint32(i - 8, Endian.little) * 256);
       }
     }
-    print("andt hen");
-    print(blockOffsets[35]);
-    print(blockOffsets[36]);
-    
+
     double imageWidth;
     double imageHeight;
     if (blockSizes.getUint32(0, Endian.little) == 0) {
@@ -53,17 +51,20 @@ class WVGPainter extends CustomPainter {
     }
 
     int paramCount = blockSizes.getUint32(28, Endian.little) * 64;
-    print(blockOffsets);
-    ByteData parameters = ByteData.sublistView(
+    ByteData rparameters = ByteData.sublistView(
       file,
       blockOffsets[7],
       blockOffsets[8],
     );
-    //parameters.setFloat32(0, .5, Endian.little);
-    print(parameters);
+    ByteData parameters = ByteData(rparameters.lengthInBytes);
     for (int i = 0; i < paramCount * 4; i += 4) {
-      print(parameters.getUint32(i, Endian.little).toRadixString(16));
+      parameters.setUint32(
+          i, rparameters.getUint32(i, Endian.little), Endian.little);
+      print(
+        'param${i ~/ 4}: ${parameters.getUint32(i, Endian.little).toRadixString(16)}',
+      );
     }
+    //parameters.setFloat32(0, .5, Endian.little);
     int exprCount = blockSizes.getUint32(60, Endian.little);
     ByteData exprResults = ByteData(exprCount * 4);
     for (int currentExpr = 0; currentExpr < exprCount; currentExpr++) {
@@ -77,10 +78,11 @@ class WVGPainter extends CustomPainter {
       int stackIndex = 0;
       int errorCount = 0;
       for (; exprIndex < bytesPerBlock; exprIndex += 4) {
-        assert(stackIndex < 64);
-        print("${expr.getUint32(exprIndex, Endian.little).toRadixString(16)}:");
+        assert(stackIndex < 64); // TODO: should this be 256?
+        print(
+            'expr ${expr.getUint32(exprIndex, Endian.little).toRadixString(16)}:');
         if (expr.getUint32(exprIndex, Endian.little) < 0x80000000) {
-          print("raw number");
+          print('raw number');
           stack.setUint32(
             stackIndex,
             expr.getUint32(
@@ -91,49 +93,46 @@ class WVGPainter extends CustomPainter {
           );
           stackIndex += 4;
         } else if (expr.getUint32(exprIndex, Endian.little) < 0x80020001) {
-          print("single arg");
           if (stackIndex < 4) {
             errorCount++;
-            print("error type -2");
+            print('error type -2: stack index less than one');
           } else if (expr.getUint32(exprIndex, Endian.little) == 0x80000000) {
-            print("int-negate");
+            print('int-negate');
             stack.setInt32(stackIndex - 4,
                 -stack.getInt32(stackIndex - 4, Endian.little), Endian.little);
           } else if (expr.getUint32(exprIndex, Endian.little) == 0x80010000) {
-            print("float-negate");
+            print('float-negate');
             stack.setFloat32(
                 stackIndex - 4,
                 -stack.getFloat32(stackIndex - 4, Endian.little),
                 Endian.little);
           } else if (expr.getUint32(exprIndex, Endian.little) == 0x80008000) {
-            print("round");
+            print('round');
             stack.setInt32(
                 stackIndex - 4,
                 stack.getFloat32(stackIndex - 4, Endian.little).round(),
                 Endian.little);
           } else if (expr.getUint32(exprIndex, Endian.little) == 0x80018000) {
-            print("round to float");
+            print('round to float');
             stack.setFloat32(
                 stackIndex - 4,
                 stack.getInt32(stackIndex - 4, Endian.little).roundToDouble(),
                 Endian.little);
           } else if (expr.getUint32(exprIndex, Endian.little) == 0x80020000) {
-            print("duplicate");
+            print('duplicate');
             stack.setInt32(stackIndex,
                 stack.getInt32(stackIndex - 4, Endian.little), Endian.little);
             stackIndex += 4;
           } else {
             errorCount++;
-            print(
-                "error type -1: ${expr.getUint32(exprIndex, Endian.little).toRadixString(16)}");
+            print('error type -1: invalid one-operand expression');
           }
         } else if (expr.getUint32(exprIndex, Endian.little) < 0xC0010005) {
-          print("double-arg");
           if (stackIndex < 8) {
-            print("error type 1 $stackIndex");
+            print('error type 1 $stackIndex');
             errorCount++;
           } else if (expr.getUint32(exprIndex, Endian.little) == 0xC0000001) {
-            print("int add");
+            print('int add');
             stack.setInt32(
                 stackIndex - 8,
                 stack.getInt32(stackIndex - 8, Endian.little) +
@@ -141,7 +140,7 @@ class WVGPainter extends CustomPainter {
                 Endian.little);
             stackIndex -= 4;
           } else if (stack.getUint32(exprIndex, Endian.little) == 0xC0000002) {
-            print("int minus");
+            print('int minus');
             stack.setInt32(
                 stackIndex - 8,
                 stack.getInt32(stackIndex - 8, Endian.little) -
@@ -149,7 +148,7 @@ class WVGPainter extends CustomPainter {
                 Endian.little);
             stackIndex -= 4;
           } else if (expr.getUint32(exprIndex, Endian.little) == 0xC0000003) {
-            print("int *");
+            print('int *');
             stack.setInt32(
                 stackIndex - 8,
                 stack.getInt32(stackIndex - 8, Endian.little) *
@@ -157,7 +156,7 @@ class WVGPainter extends CustomPainter {
                 Endian.little);
             stackIndex -= 4;
           } else if (expr.getUint32(exprIndex, Endian.little) == 0xC0000004) {
-            print("~/");
+            print('~/');
             stack.setInt32(
                 stackIndex - 8,
                 stack.getInt32(stackIndex - 8, Endian.little) ~/
@@ -165,7 +164,7 @@ class WVGPainter extends CustomPainter {
                 Endian.little);
             stackIndex -= 4;
           } else if (expr.getUint32(exprIndex, Endian.little) == 0xC0010001) {
-            print("float add");
+            print('float add');
             stack.setFloat32(
                 stackIndex - 8,
                 stack.getFloat32(stackIndex - 8, Endian.little) +
@@ -173,7 +172,7 @@ class WVGPainter extends CustomPainter {
                 Endian.little);
             stackIndex -= 4;
           } else if (expr.getUint32(exprIndex, Endian.little) == 0xC0010002) {
-            print("float -");
+            print('float -');
             stack.setFloat32(
                 stackIndex - 8,
                 stack.getFloat32(stackIndex - 8, Endian.little) -
@@ -181,7 +180,7 @@ class WVGPainter extends CustomPainter {
                 Endian.little);
             stackIndex -= 4;
           } else if (expr.getUint32(exprIndex, Endian.little) == 0xC0010003) {
-            print("float times");
+            print('float times');
             stack.setFloat32(
                 stackIndex - 8,
                 stack.getFloat32(stackIndex - 8, Endian.little) *
@@ -189,7 +188,7 @@ class WVGPainter extends CustomPainter {
                 Endian.little);
             stackIndex -= 4;
           } else if (expr.getUint32(exprIndex, Endian.little) == 0xC0010004) {
-            print("float /");
+            print('float /');
             stack.setFloat32(
                 stackIndex - 8,
                 stack.getFloat32(stackIndex - 8, Endian.little) /
@@ -197,20 +196,22 @@ class WVGPainter extends CustomPainter {
                 Endian.little);
             stackIndex -= 4;
           } else {
-            print("error type 0");
+            print('error type 0: invalid two-operand expression');
             errorCount++;
           }
         } else if (expr.getUint32(exprIndex, Endian.little) < 0xFFF000000) {
-          print("no-arg");
-          if (expr.getUint32(exprIndex, Endian.little) == 0xFFC00000) break;
+          if (expr.getUint32(exprIndex, Endian.little) == 0xFFC00000) {
+            break; // terminate
+          }
           if (expr.getUint32(exprIndex, Endian.little) >> 16 == 0xFFD0) {
+            // parameter reference
             if (expr.getUint32(exprIndex, Endian.little) - 0xFFD00000 >=
                 paramCount) {
-              print("error type 2");
+              print('error type 2: reference nonexistent parameter');
               errorCount++;
               continue;
             }
-            print("getParam");
+            print('parameter reference');
             stack.setUint32(
                 stackIndex,
                 parameters.getUint32(
@@ -219,13 +220,14 @@ class WVGPainter extends CustomPainter {
                 Endian.little);
             stackIndex += 4;
           } else if (expr.getUint32(exprIndex, Endian.little) >> 16 == 0xFFE0) {
+            // expression reference
             if (expr.getUint32(exprIndex, Endian.little) - 0xFFE00000 >=
                 currentExpr) {
               errorCount++;
-              print("error type 3");
+              print('error type 3: cannot reference future expression');
               continue;
             }
-            print("getExpr");
+            print('expression reference');
             stack.setUint32(
                 stackIndex,
                 exprResults.getUint32(
@@ -234,12 +236,12 @@ class WVGPainter extends CustomPainter {
                 Endian.little);
             stackIndex += 4;
           } else {
-            print("error type 4");
+            print(
+                'error type 4: unexpected high sixteen bits for no-argument expression');
             errorCount++;
           }
         } else {
-          print(
-              "error type 5 (${expr.getUint32(exprIndex, Endian.little).toRadixString(16)})");
+          print('error type 5: expression more than or equal to 0xFFF000000');
           errorCount++;
         }
       }
@@ -247,9 +249,9 @@ class WVGPainter extends CustomPainter {
         stack.setUint32(0, 0, Endian.little);
         stackIndex += 4;
       }
-      print("sI: $stackIndex");
-      print("result: ${stack.getFloat32(stackIndex - 4, Endian.little)}");
-      print("\n");
+      print('stack index: $stackIndex');
+      print('result: ${stack.getFloat32(stackIndex - 4, Endian.little)}');
+      print('\n');
       exprResults.setUint32(currentExpr * 4,
           stack.getUint32(stackIndex - 4, Endian.little), Endian.little);
       //if (errorCount != 0) return;
@@ -302,12 +304,8 @@ class WVGPainter extends CustomPainter {
 
     Curve getCurve(int i, int b, int g) {
       int group = i ~/ 64;
-      int groupOffset = blockOffsets[31] +
-          b +
-          group * g;
-      print('$i, $g, $b');
-      assert(groupOffset <
-          blockOffsets[32]);
+      int groupOffset = blockOffsets[31] + b + group * g;
+      assert(groupOffset < blockOffsets[32]);
       ByteData? rawcell(int j) {
         if (j >= g) return null;
         return ByteData.sublistView(
@@ -377,7 +375,6 @@ class WVGPainter extends CustomPainter {
       int startBlockIndex = rawShapes.getUint32(i, Endian.little);
       int startCurveIndex = rawShapes.getUint32(i + 4, Endian.little);
       int curveCount = rawShapes.getUint32(i + 8, Endian.little);
-      print("c $curveCount");
       int groupSize = rawShapes.getUint32(i + 12, Endian.little);
       List<Curve> curves = [];
       for (int i = startCurveIndex; i < startCurveIndex + curveCount; i++) {
@@ -385,7 +382,6 @@ class WVGPainter extends CustomPainter {
       }
       shapes.add(Shape(curves));
     }
-    print(shapes);
     ByteData rawGradients = ByteData.sublistView(
       file,
       blockOffsets[43],
@@ -479,7 +475,7 @@ class WVGPainter extends CustomPainter {
             sig == 0x10);
       } else {
         print(
-            "Paint getter failed, mode: ${mode.toRadixString(16)}, arg: ${arg.toRadixString(16)}, color: ${color.toRadixString(16)}");
+            'Paint getter failed, mode: ${mode.toRadixString(16)}, arg: ${arg.toRadixString(16)}, color: ${color.toRadixString(16)}');
         return FlatColorPaint(const Color(0x00000000));
       }
     }
@@ -512,7 +508,6 @@ class WVGPainter extends CustomPainter {
         }
         subPath.close();
         //path.addPath(subPath.transform(Float64List.fromList(matrix.matrix)), Offset.zero);
-        print("adPth");
         path.addPath(subPath, Offset.zero,
             matrix4: Float64List.fromList(matrix.matrix));
       }
@@ -533,7 +528,7 @@ class WVGPainter extends CustomPainter {
             mode = TileMode.decal;
             break;
         }
-        print(paint);
+        print('paint: $paint');
         if (paint.linear) {
           flutterPaint.shader = ui.Gradient.linear(
               Offset.zero,
@@ -557,7 +552,6 @@ class WVGPainter extends CustomPainter {
       canvas.save();
       canvas.scale(size.height / imageHeight);
       canvas.drawPath(path, flutterPaint);
-      print("darwin new path $paint");
       canvas.restore();
     }
   }
@@ -574,7 +568,7 @@ class FlatColorPaint extends Paint {
   FlatColorPaint(this.color);
   final Color color;
   @override
-  String toString() => "flat $color";
+  String toString() => 'flat $color';
 }
 
 class GradientPaint extends Paint {
@@ -585,7 +579,7 @@ class GradientPaint extends Paint {
   final bool linear;
   @override
   String toString() =>
-      "${linear ? 'linear' : 'radial'} gradient $gradient with flags $flags and matrix $matrix";
+      '${linear ? 'linear' : 'radial'} gradient $gradient with flags $flags and matrix $matrix';
 }
 
 class Gradient {
@@ -593,21 +587,21 @@ class Gradient {
   final List<double> stops;
   final List<Color> colors;
   @override
-  String toString() => "(stops $stops, colors $colors)";
+  String toString() => '(stops $stops, colors $colors)';
 }
 
 class Shape {
   Shape(this.curves);
   final List<Curve> curves;
   @override
-  String toString() => "curves $curves";
+  String toString() => 'curves $curves';
 }
 
 class Curve {
   final bool static;
   final bool valid;
   @override
-  String toString() => "static $static valid $valid curve....";
+  String toString() => 'static $static valid $valid curve....';
 
   Curve(this.static, this.valid);
 }
@@ -620,7 +614,7 @@ class CubicBezierCurve extends Curve {
   final double x3;
   final double y3;
   @override
-  String toString() => "static $static valid $valid $x1 $y1 $x2 $y2 $x3 $y3";
+  String toString() => 'static $static valid $valid $x1 $y1 $x2 $y2 $x3 $y3';
 
   CubicBezierCurve(this.x1, this.y1, this.x2, this.y2, this.x3, this.y3,
       bool static, bool valid)
@@ -634,19 +628,17 @@ class RationalQuadraticBezierCurve extends Curve {
   final double y2;
   final double w;
   @override
-  String toString() => "static $static valid $valid $x1 $y1 $x2 $y2 w $w";
+  String toString() => 'static $static valid $valid $x1 $y1 $x2 $y2 w $w';
   RationalQuadraticBezierCurve(
       this.x1, this.y1, this.x2, this.y2, this.w, bool static, bool valid)
       : super(static, valid);
 }
 
 class Matrix {
-  Matrix(this.static, this.valid, this.matrix) {
-    print(matrix);
-  }
+  Matrix(this.static, this.valid, this.matrix) {}
   final bool static;
   final bool valid;
   final List<double> matrix;
   @override
-  String toString() => "static $static valid $valid matrix $matrix";
+  String toString() => 'static $static valid $valid matrix $matrix';
 }
